@@ -1,6 +1,8 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product, User, ActivityLog, Notification, InventoryStats, Debtor, AppPreferences } from '../types';
+import { Product, User, ActivityLog, Notification, InventoryStats, Debtor, AppPreferences, UserProfile, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
+import { MANAGER_CREDENTIALS } from '../constants';
 
 interface InventoryContextType {
   user: User | null;
@@ -25,6 +27,10 @@ interface InventoryContextType {
   deleteDebtor: (id: string) => Promise<void>;
   preferences: AppPreferences;
   updatePreferences: (prefs: Partial<AppPreferences>) => void;
+  // User Management
+  allUsers: UserProfile[];
+  updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
+  refreshUsers: () => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -36,11 +42,13 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
   const [debtors, setDebtors] = useState<Debtor[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [preferences, setPreferences] = useState<AppPreferences>(() => {
     const saved = localStorage.getItem('amanabi_prefs');
-    return saved ? JSON.parse(saved) : { currency: 'GBP', defaultView: 'Show All' };
+    // Changed default currency to GHS
+    return saved ? JSON.parse(saved) : { currency: 'GHS', defaultView: 'Show All' };
   });
 
   // --- Auth & Initial Load ---
@@ -48,10 +56,23 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     // Check active session on mount
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (session?.user) {
-        handleUserSession(session.user);
-        fetchData(); // Fetch data if logged in
+        await handleUserSession(session.user);
+        fetchData(session.user.id); 
       } else {
+        // CHECK FOR LOCAL FALLBACK SESSION
+        const fallback = localStorage.getItem('amanabi_fallback_session');
+        if (fallback) {
+          try {
+            const fallbackUser = JSON.parse(fallback);
+            setUser(fallbackUser);
+            fetchData(); // Fetch data using public policies
+          } catch (e) {
+            console.error("Failed to parse fallback session", e);
+            localStorage.removeItem('amanabi_fallback_session');
+          }
+        }
         setIsLoading(false);
       }
     };
@@ -59,58 +80,122 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     checkSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        handleUserSession(session.user);
-        fetchData();
+        await handleUserSession(session.user);
+        fetchData(session.user.id);
       } else {
-        setUser(null);
-        setProducts([]);
-        setDebtors([]);
+        if (_event === 'SIGNED_OUT') {
+          // Only clear if explicitly signed out (handled in logout function usually, but good safety)
+        }
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleUserSession = (authUser: any) => {
-    // MANAGER EMAIL CHECK - Case Insensitive
-    const isManager = authUser.email?.toLowerCase() === 'amabelle100@yahoo.com';
+  const handleUserSession = async (authUser: any) => {
+    let role: UserRole = 'STAFF';
+    let name = authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Staff';
     
-    // Check for metadata name, fallback to email part, fallback to generic
-    const displayName = authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Staff';
+    // Default override for Manager Email
+    if (authUser.email?.toLowerCase() === MANAGER_CREDENTIALS.email.toLowerCase()) {
+      role = 'MANAGER';
+      name = 'Manager Amabelle';
+    }
+
+    try {
+      // 1. Force Sync Profile (Upsert)
+      const updates = {
+        id: authUser.id,
+        email: authUser.email,
+        name: name,
+        last_seen: new Date().toISOString()
+      };
+      
+      await supabase.from('profiles').upsert(updates, { onConflict: 'id' });
+
+      // 2. Fetch latest profile data
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, name')
+        .eq('id', authUser.id)
+        .single();
+      
+      if (profile) {
+        role = profile.role as UserRole;
+        if (profile.name) name = profile.name;
+      }
+    } catch (err) {
+      console.warn("Profile sync warning:", err);
+    }
 
     setUser({
       id: authUser.id,
       email: authUser.email!,
-      name: isManager ? 'Manager Amabelle' : displayName,
-      role: isManager ? 'MANAGER' : 'STAFF'
+      name: name,
+      role: role
     });
+    
+    return role;
   };
 
-  const fetchData = async () => {
+  const fetchData = async (userId?: string) => {
     setIsLoading(true);
     try {
       // Fetch Products
-      const { data: prodData, error: prodError } = await supabase
-        .from('products')
-        .select('*');
-      
-      if (prodError) console.error('Error fetching products:', prodError);
+      const { data: prodData, error: prodError } = await supabase.from('products').select('*');
+      if (prodError) console.error('Error fetching products:', prodError.message);
       else if (prodData) setProducts(prodData);
 
       // Fetch Debtors
-      const { data: debtData, error: debtError } = await supabase
-        .from('debtors')
-        .select('*');
-        
-      if (debtError) console.error('Error fetching debtors:', debtError);
+      const { data: debtData, error: debtError } = await supabase.from('debtors').select('*');
+      if (debtError) console.error('Error fetching debtors:', debtError.message);
       else if (debtData) setDebtors(debtData);
 
-    } catch (err) {
-      console.error('Unexpected error fetching data:', err);
+      // Fetch Users
+      await refreshUsers();
+
+    } catch (err: any) {
+      console.error('Unexpected error fetching data:', err.message || err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const refreshUsers = async () => {
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('last_seen', { ascending: false });
+
+      if (!userError && userData) {
+        setAllUsers(userData as UserProfile[]);
+      } else if (userError) {
+        console.warn("Could not fetch users list:", userError.message);
+      }
+    } catch (e) {
+      console.error("Error refreshing users", e);
+    }
+  };
+
+  const updateUserRole = async (userId: string, newRole: UserRole) => {
+    checkPermission();
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      const targetUser = allUsers.find(u => u.id === userId);
+      addLog('USER_MGMT', `Changed role for ${targetUser?.name || targetUser?.email} to ${newRole}`);
+    } catch (err: any) {
+      console.error('Error updating role:', err);
+      alert('Failed to update role. ' + err.message);
     }
   };
 
@@ -177,9 +262,58 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
 
   // --- Auth Actions ---
   const login = async (email: string, pass: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) throw error;
-    addLog('LOGIN', `User ${email} logged in`);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      
+      // FALLBACK LOGIC
+      if (error) {
+        if (
+          email.trim().toLowerCase() === MANAGER_CREDENTIALS.email.toLowerCase() && 
+          pass.trim() === MANAGER_CREDENTIALS.password
+        ) {
+          console.log("Supabase login failed, using Manager Fallback");
+          const fallbackUser = {
+            id: 'manager-fallback-id',
+            email: MANAGER_CREDENTIALS.email,
+            name: 'Manager Amabelle (Local)',
+            role: 'MANAGER' as UserRole
+          };
+          setUser(fallbackUser);
+          // SAVE TO LOCAL STORAGE FOR PERSISTENCE
+          localStorage.setItem('amanabi_fallback_session', JSON.stringify(fallbackUser));
+          
+          fetchData();
+          addLog('LOGIN', `Manager logged in via Fallback`);
+          return;
+        }
+        throw error;
+      }
+      
+      // If successful standard login, clear fallback just in case
+      localStorage.removeItem('amanabi_fallback_session');
+      addLog('LOGIN', `User ${email} logged in`);
+    } catch (err: any) {
+      // DOUBLE CHECK FALLBACK IN CATCH
+      if (
+        email.trim().toLowerCase() === MANAGER_CREDENTIALS.email.toLowerCase() && 
+        pass.trim() === MANAGER_CREDENTIALS.password
+      ) {
+        console.log("Supabase exception caught, using Manager Fallback");
+        const fallbackUser = {
+          id: 'manager-fallback-id',
+          email: MANAGER_CREDENTIALS.email,
+          name: 'Manager Amabelle (Local)',
+          role: 'MANAGER' as UserRole
+        };
+        setUser(fallbackUser);
+        localStorage.setItem('amanabi_fallback_session', JSON.stringify(fallbackUser));
+        fetchData();
+        return;
+      }
+
+      console.error("Login process error:", err);
+      throw err;
+    }
   };
 
   const signup = async (email: string, pass: string, name: string) => {
@@ -198,7 +332,11 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('amanabi_fallback_session');
     setUser(null);
+    setProducts([]);
+    setDebtors([]);
+    setAllUsers([]);
   };
 
   // --- Product CRUD (Supabase) ---
@@ -212,25 +350,16 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
   const addProduct = async (data: Omit<Product, 'id' | 'lastUpdated'>) => {
     checkPermission();
     try {
-      const newProduct = {
-        ...data,
-        lastUpdated: new Date().toISOString()
-      };
-
-      const { data: inserted, error } = await supabase
-        .from('products')
-        .insert([newProduct])
-        .select();
-
+      const newProduct = { ...data, lastUpdated: new Date().toISOString() };
+      const { data: inserted, error } = await supabase.from('products').insert([newProduct]).select();
       if (error) throw error;
-
       if (inserted && inserted.length > 0) {
         setProducts(prev => [...prev, inserted[0]]);
         addLog('ADD', `Added new item: ${inserted[0].name}`);
       }
     } catch (err) {
       console.error('Error adding product:', err);
-      if ((err as any).message !== "Unauthorized") alert('Failed to save product.');
+      if ((err as any).message !== "Unauthorized") alert('Failed to save product. Database error.');
     }
   };
 
@@ -238,14 +367,8 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     checkPermission();
     try {
       const updatedData = { ...updates, lastUpdated: new Date().toISOString() };
-      
-      const { error } = await supabase
-        .from('products')
-        .update(updatedData)
-        .eq('id', id);
-
+      const { error } = await supabase.from('products').update(updatedData).eq('id', id);
       if (error) throw error;
-
       setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updatedData } : p));
       const prodName = products.find(p => p.id === id)?.name;
       addLog('UPDATE', `Updated details for ${prodName}`);
@@ -257,13 +380,8 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
   const deleteProduct = async (id: string) => {
     checkPermission();
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('products').delete().eq('id', id);
       if (error) throw error;
-
       const prodName = products.find(p => p.id === id)?.name;
       setProducts(prev => prev.filter(p => p.id !== id));
       addLog('DELETE', `Deleted product: ${prodName}`);
@@ -280,7 +398,6 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     if (!product) return;
 
     const sourceAvailable = getAvailable(product, from);
-
     if (sourceAvailable < amount) {
       alert(`Insufficient available stock in ${from}`);
       return;
@@ -288,7 +405,6 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
 
     try {
       const updates: Partial<Product> = { lastUpdated: new Date().toISOString() };
-      
       if (from === 'Nsakena') updates.nsakenaPrev = Number(product.nsakenaPrev) - amount;
       if (from === 'Viv') updates.vivPrev = Number(product.vivPrev) - amount;
       if (from === 'YellowSack') updates.yellowSackPrev = Number(product.yellowSackPrev) - amount;
@@ -297,21 +413,15 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
       if (to === 'Viv') updates.vivPrev = Number(product.vivPrev) + amount;
       if (to === 'YellowSack') updates.yellowSackPrev = Number(product.yellowSackPrev) + amount;
 
-      const { error } = await supabase
-        .from('products')
-        .update(updates)
-        .eq('id', id);
-
+      const { error } = await supabase.from('products').update(updates).eq('id', id);
       if (error) throw error;
 
       setProducts(prev => prev.map(p => {
         if (p.id !== id) return p;
         const newP = { ...p, ...updates };
-        // Re-calculate local state correctly
         if (from === 'Nsakena') newP.nsakenaPrev = Number(p.nsakenaPrev) - amount;
         if (from === 'Viv') newP.vivPrev = Number(p.vivPrev) - amount;
         if (from === 'YellowSack') newP.yellowSackPrev = Number(p.yellowSackPrev) - amount;
-
         if (to === 'Nsakena') newP.nsakenaPrev = Number(p.nsakenaPrev) + amount;
         if (to === 'Viv') newP.vivPrev = Number(p.vivPrev) + amount;
         if (to === 'YellowSack') newP.yellowSackPrev = Number(p.yellowSackPrev) + amount;
@@ -324,24 +434,12 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     }
   };
 
-  // --- Debtor CRUD (Supabase) ---
-
   const addDebtor = async (data: Omit<Debtor, 'id' | 'isPaid' | 'date'>) => {
     checkPermission();
     try {
-      const newDebtor = {
-        ...data,
-        isPaid: false,
-        date: new Date().toISOString()
-      };
-
-      const { data: inserted, error } = await supabase
-        .from('debtors')
-        .insert([newDebtor])
-        .select();
-
+      const newDebtor = { ...data, isPaid: false, date: new Date().toISOString() };
+      const { data: inserted, error } = await supabase.from('debtors').insert([newDebtor]).select();
       if (error) throw error;
-
       if (inserted && inserted.length > 0) {
         setDebtors(prev => [inserted[0], ...prev]);
         addLog('DEBTOR', `Added new debtor: ${inserted[0].name}`);
@@ -354,13 +452,8 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
   const updateDebtor = async (id: string, updates: Partial<Debtor>) => {
     checkPermission();
     try {
-      const { error } = await supabase
-        .from('debtors')
-        .update(updates)
-        .eq('id', id);
-
+      const { error } = await supabase.from('debtors').update(updates).eq('id', id);
       if (error) throw error;
-
       setDebtors(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
       const dName = debtors.find(d => d.id === id)?.name;
       addLog('DEBTOR', `Updated info for debtor: ${dName}`);
@@ -373,16 +466,10 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     checkPermission();
     const debtor = debtors.find(d => d.id === id);
     if (!debtor) return;
-    
     try {
       const newStatus = !debtor.isPaid;
-      const { error } = await supabase
-        .from('debtors')
-        .update({ isPaid: newStatus })
-        .eq('id', id);
-
+      const { error } = await supabase.from('debtors').update({ isPaid: newStatus }).eq('id', id);
       if (error) throw error;
-
       setDebtors(prev => prev.map(d => d.id === id ? { ...d, isPaid: newStatus } : d));
       addLog('DEBTOR', `Marked ${debtor.name} as ${newStatus ? 'Paid' : 'Unpaid'}`);
     } catch (err) {
@@ -393,13 +480,8 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
   const deleteDebtor = async (id: string) => {
     checkPermission();
     try {
-      const { error } = await supabase
-        .from('debtors')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('debtors').delete().eq('id', id);
       if (error) throw error;
-
       setDebtors(prev => prev.filter(d => d.id !== id));
       addLog('DEBTOR', `Deleted debtor record`);
     } catch (err) {
@@ -419,7 +501,6 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
     setPreferences(prev => ({ ...prev, ...prefs }));
   };
 
-  // --- Derived Stats ---
   const stats: InventoryStats = {
     totalProducts: products.length,
     totalValue: products.reduce((acc, p) => acc + (getAvailable(p, 'All') * (Number(p.pricePurchase) || 0)), 0),
@@ -434,7 +515,8 @@ export const InventoryProvider = ({ children }: { children?: ReactNode }) => {
       products, isLoading, addProduct, updateProduct, deleteProduct, transferStock,
       logs, notifications, markNotificationRead, stats, getFormattedCurrency,
       debtors, addDebtor, updateDebtor, toggleDebtorStatus, deleteDebtor,
-      preferences, updatePreferences
+      preferences, updatePreferences,
+      allUsers, updateUserRole, refreshUsers
     }}>
       {children}
     </InventoryContext.Provider>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   TrendingUp, 
@@ -295,7 +296,7 @@ const Dashboard: React.FC = () => {
               <input 
                 type="text" 
                 placeholder="Debtor Name" 
-                className="p-3 border rounded-xl text-base focus:ring-2 focus:ring-blue-500 outline-none"
+                className="p-3 border rounded-xl text-base bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                 value={newDebtor.name}
                 onChange={e => setNewDebtor({...newDebtor, name: e.target.value})}
                 required
@@ -303,7 +304,7 @@ const Dashboard: React.FC = () => {
               <input 
                 type="number" 
                 placeholder="Amount Owed" 
-                className="p-3 border rounded-xl text-base focus:ring-2 focus:ring-blue-500 outline-none"
+                className="p-3 border rounded-xl text-base bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                 value={newDebtor.amount}
                 onChange={e => setNewDebtor({...newDebtor, amount: e.target.value})}
                 required
@@ -311,7 +312,7 @@ const Dashboard: React.FC = () => {
               <input 
                 type="text" 
                 placeholder="Notes (Optional)" 
-                className="p-3 border rounded-xl text-base focus:ring-2 focus:ring-blue-500 outline-none"
+                className="p-3 border rounded-xl text-base bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                 value={newDebtor.notes}
                 onChange={e => setNewDebtor({...newDebtor, notes: e.target.value})}
               />

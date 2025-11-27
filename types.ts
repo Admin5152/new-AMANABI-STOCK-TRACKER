@@ -1,3 +1,4 @@
+
 export type UserRole = 'MANAGER' | 'STAFF';
 
 export interface User {
@@ -6,6 +7,14 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  last_seen: string;
 }
 
 export interface Debtor {
@@ -64,7 +73,7 @@ export interface InventoryStats {
 
 export interface ActivityLog {
   id: string;
-  action: 'ADD' | 'UPDATE' | 'DELETE' | 'TRANSFER' | 'LOGIN' | 'DEBTOR';
+  action: 'ADD' | 'UPDATE' | 'DELETE' | 'TRANSFER' | 'LOGIN' | 'DEBTOR' | 'USER_MGMT';
   description: string;
   user: string;
   timestamp: string;

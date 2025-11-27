@@ -1,6 +1,12 @@
+
 import { Product, User, Debtor } from './types';
 
 export const APP_NAME = "AMANABI ENT.";
+
+export const MANAGER_CREDENTIALS = {
+  email: 'amabelle100@yahoo.com',
+  password: 'Agyeimensah5152'
+};
 
 export const MOCK_USER: User = {
   id: 'u1',

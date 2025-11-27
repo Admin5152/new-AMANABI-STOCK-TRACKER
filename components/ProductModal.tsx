@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
 import { useInventory } from '../context/InventoryContext';
@@ -9,9 +10,10 @@ interface ProductModalProps {
   onClose: () => void;
   initialData?: Product;
   limitLocation?: 'Nsakena' | 'Viv' | 'YellowSack';
+  defaultWeek?: string;
 }
 
-const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialData, limitLocation }) => {
+const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialData, limitLocation, defaultWeek }) => {
   const { addProduct, updateProduct, user } = useInventory();
   
   // RBAC: Check if user is Manager
@@ -32,7 +34,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
     priceSelling: 0,
     size: '',
     color: '',
-    collectionWeek: '', // This should ideally come from the parent/table context if new
+    collectionWeek: defaultWeek || '', 
     supplierName: '',
     notes: ''
   });
@@ -40,8 +42,10 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
+    } else if (defaultWeek) {
+      setFormData(prev => ({ ...prev, collectionWeek: defaultWeek }));
     }
-  }, [initialData]);
+  }, [initialData, defaultWeek]);
 
   if (!isOpen) return null;
 
@@ -81,7 +85,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
         {/* Header */}
         <div className="flex justify-between items-center p-4 sm:p-6 border-b sticky top-0 bg-white z-10">
           <div>
-             <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+             <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
                {initialData ? 'Edit Item' : 'Add New Item'}
                {limitLocation && <span className="hidden sm:inline-flex text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs sm:text-sm font-medium border border-blue-100">@{limitLocation}</span>}
              </h2>
@@ -117,7 +121,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                     onChange={handleChange} 
                     required 
                     disabled={!isManager}
-                    className="w-full p-2.5 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-500" 
+                    className="w-full p-2.5 bg-white border border-blue-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-500" 
                     placeholder="Enter item name..." 
                   />
                </div>
@@ -130,7 +134,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                       value={formData.collectionWeek} 
                       onChange={handleChange} 
                       disabled={!isManager}
-                      className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-50" 
+                      className="w-full p-2 bg-white border rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-50" 
                       placeholder="e.g. 42" 
                     />
                  </div>
@@ -141,7 +145,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                       value={formData.category} 
                       onChange={handleChange} 
                       disabled={!isManager}
-                      className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-gray-50"
+                      className="w-full p-2 bg-white border rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-50"
                     >
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
@@ -156,7 +160,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                        value={formData.size} 
                        onChange={handleChange} 
                        disabled={!isManager}
-                       className="w-full p-2 border rounded-lg outline-none disabled:bg-gray-50" 
+                       className="w-full p-2 bg-white border rounded-lg text-gray-900 outline-none disabled:bg-gray-50" 
                        placeholder="S, M..." 
                       />
                   </div>
@@ -167,7 +171,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                        value={formData.color} 
                        onChange={handleChange} 
                        disabled={!isManager}
-                       className="w-full p-2 border rounded-lg outline-none disabled:bg-gray-50" 
+                       className="w-full p-2 bg-white border rounded-lg text-gray-900 outline-none disabled:bg-gray-50" 
                        placeholder="Blue..." 
                       />
                   </div>
@@ -180,7 +184,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                     onChange={handleChange} 
                     disabled={!isManager}
                     rows={2} 
-                    className="w-full p-2 border rounded-lg outline-none disabled:bg-gray-50" 
+                    className="w-full p-2 bg-white border rounded-lg text-gray-900 outline-none disabled:bg-gray-50" 
                     placeholder="Optional details..." 
                   />
                </div>
@@ -213,7 +217,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                             value={formData.nsakenaPrev} 
                             onChange={handleChange} 
                             disabled={!isManager}
-                            className="w-full p-2 border rounded font-medium disabled:bg-gray-50" 
+                            className="w-full p-2 bg-white border rounded font-medium text-gray-900 disabled:bg-gray-50" 
                           />
                         </div>
                         <div>
@@ -224,7 +228,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                             value={formData.nsakenaSold} 
                             onChange={handleChange} 
                             disabled={!isManager}
-                            className="w-full p-2 border rounded font-medium text-red-600 disabled:bg-gray-50" 
+                            className="w-full p-2 bg-white border rounded font-medium text-red-600 disabled:bg-gray-50" 
                           />
                           <div className="text-right mt-1.5">
                              <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
@@ -254,7 +258,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                             value={formData.vivPrev} 
                             onChange={handleChange} 
                             disabled={!isManager}
-                            className="w-full p-2 border rounded font-medium disabled:bg-gray-50" 
+                            className="w-full p-2 bg-white border rounded font-medium text-gray-900 disabled:bg-gray-50" 
                           />
                         </div>
                         <div>
@@ -265,7 +269,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                             value={formData.vivSold} 
                             onChange={handleChange} 
                             disabled={!isManager}
-                            className="w-full p-2 border rounded font-medium text-red-600 disabled:bg-gray-50" 
+                            className="w-full p-2 bg-white border rounded font-medium text-red-600 disabled:bg-gray-50" 
                           />
                           <div className="text-right mt-1.5">
                              <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
@@ -295,7 +299,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                             value={formData.yellowSackPrev} 
                             onChange={handleChange} 
                             disabled={!isManager}
-                            className="w-full p-2 border rounded font-medium disabled:bg-gray-50" 
+                            className="w-full p-2 bg-white border rounded font-medium text-gray-900 disabled:bg-gray-50" 
                           />
                         </div>
                         <div>
@@ -306,7 +310,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                             value={formData.yellowSackSold} 
                             onChange={handleChange} 
                             disabled={!isManager}
-                            className="w-full p-2 border rounded font-medium text-red-600 disabled:bg-gray-50" 
+                            className="w-full p-2 bg-white border rounded font-medium text-red-600 disabled:bg-gray-50" 
                           />
                           <div className="text-right mt-1.5">
                              <span className="text-sm font-bold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded border border-yellow-100">
@@ -327,7 +331,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, initialDat
                        value={formData.reorderLevel} 
                        onChange={handleChange} 
                        disabled={!isManager}
-                       className="w-16 p-1 border border-red-200 rounded text-center font-bold text-red-600 outline-none disabled:bg-red-50" 
+                       className="w-16 p-1 border border-red-200 rounded text-center font-bold text-red-600 outline-none disabled:bg-red-50 bg-white" 
                       />
                    </div>
                 </div>

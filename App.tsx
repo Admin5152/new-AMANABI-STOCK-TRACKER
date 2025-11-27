@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { InventoryProvider, useInventory } from './context/InventoryContext';
 import Sidebar from './components/Sidebar';
@@ -6,7 +7,6 @@ import InventoryTable from './components/InventoryTable';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import { Menu, Store, AlertCircle, Check, ArrowRight, Eye, EyeOff, ShoppingCart } from 'lucide-react';
-import { supabase } from './lib/supabase';
 
 // Splash Screen Component with Animation
 const SplashScreen = () => {
@@ -41,49 +41,15 @@ const LoginScreen = () => {
         alert("Account created! You can now log in.");
         setIsSignUp(false);
       } else {
-        try {
-          // Explicitly try to sign in
-          const { error } = await supabase.auth.signInWithPassword({ 
-            email: email.trim(), 
-            password: password.trim() 
-          });
-          
-          if (error) throw error;
-          
-          // If successful, the auth listener in Context will handle the state update
-        } catch (loginErr: any) {
-          // Robust Check: If specific manager email fails because account doesn't exist, auto-create
-          if (email.trim().toLowerCase() === 'amabelle100@yahoo.com' && loginErr.message.includes('Invalid login credentials')) {
-             try {
-                // Check if user exists but has wrong password vs user doesn't exist
-                // Supabase doesn't reveal user existence security-wise easily, but we can try to signup
-                const { error: signUpError } = await supabase.auth.signUp({ 
-                  email: email.trim(), 
-                  password: password.trim(),
-                  options: { data: { full_name: 'Manager Amabelle' } }
-                });
-
-                if (signUpError) {
-                  // If signup fails (e.g. user already exists), then it really was a wrong password
-                  throw new Error("Invalid login credentials. If you created this account before, check your password.");
-                } else {
-                  // Signup success, now login
-                  await supabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
-                }
-             } catch (err: any) {
-               throw loginErr; // Throw original login error if auto-provision fails logic
-             }
-          } else {
-            throw loginErr;
-          }
-        }
+        // Try to login. If Supabase fails but it's the manager, Context will handle fallback.
+        await login(email.trim(), password.trim());
       }
     } catch (err: any) {
       console.error(err);
-      if (err.message.includes("Email not confirmed")) {
+      if (err.message?.includes("Email not confirmed")) {
         setError("Please verify your email address before logging in.");
       } else {
-        setError(err.message || "Authentication failed.");
+        setError(err.message || "Authentication failed. Check credentials.");
       }
     } finally {
       setLoading(false);
@@ -177,7 +143,7 @@ const LoginScreen = () => {
                   type="text" 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-lg placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent outline-none transition-all" 
+                  className="w-full px-5 py-3.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-lg placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
                   placeholder="e.g. John Doe"
                   required={isSignUp}
                 />
@@ -190,7 +156,7 @@ const LoginScreen = () => {
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-lg placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent outline-none transition-all" 
+                className="w-full px-5 py-3.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-lg placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
                 placeholder="name@example.com"
                 required
               />
@@ -205,7 +171,7 @@ const LoginScreen = () => {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-lg placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent outline-none transition-all pr-12" 
+                  className="w-full px-5 py-3.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-lg placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pr-12" 
                   placeholder="••••••••"
                   required
                   minLength={6}

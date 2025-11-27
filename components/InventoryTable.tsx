@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useInventory } from '../context/InventoryContext';
 import { 
@@ -144,7 +145,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ locationFilter }) => {
              type="number" 
              value={weekNumber}
              onChange={(e) => setWeekNumber(e.target.value)}
-             className="w-full text-2xl font-bold text-gray-900 border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+             className="w-full text-2xl font-bold text-gray-900 border border-gray-200 rounded-lg p-3 bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
              placeholder="#"
            />
         </div>
@@ -159,7 +160,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ locationFilter }) => {
                type="date"
                value={weekDate}
                onChange={(e) => setWeekDate(e.target.value)}
-               className="w-full text-2xl font-bold text-gray-900 border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+               className="w-full text-2xl font-bold text-gray-900 border border-gray-200 rounded-lg p-3 bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
              />
              <Calendar className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-6 h-6 pointer-events-none" />
            </div>
@@ -196,7 +197,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ locationFilter }) => {
                   placeholder="Search item..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-base focus:outline-none focus:border-blue-500 w-full sm:w-64 transition-all"
+                  className="pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-base bg-white focus:outline-none focus:border-blue-500 w-full sm:w-64 transition-all"
                 />
              </div>
              <div className="relative w-full sm:w-auto">
